@@ -10,7 +10,6 @@ imgui = "0.10"
 imgui-glium-renderer = "0.10"
 imgui-winit-support = "0.10"
 winit = { version = "0.27", default-features = false }
-anyhow = "1.0"
 rand = { version = "0.8", default-features = false, features = ["std", "std_rng"] }
 
 [profile.release]

@@ -1,11 +1,10 @@
 #![windows_subsystem = "windows"]
-use anyhow::Context;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use glium::{Display, Surface};
 use imgui::Context as ImguiContext;
 use imgui_glium_renderer::Renderer;
 use imgui_winit_support::{HiDpiMode, WinitPlatform};
-use rand::Rng;
+use rand::{Rng, SeedableRng};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use winit::event::{Event, WindowEvent};
@@ -60,6 +59,9 @@ impl ReverbState {
         // Left: ~20ms, Right: ~30ms
         let size_l = (sample_rate * 0.020) as usize;
         let size_r = (sample_rate * 0.030) as usize;
+        // Ensure non-zero buffer size to prevent panics
+        let size_l = size_l.max(1);
+        let size_r = size_r.max(1);
         Self {
             buffer_l: vec![0.0; size_l],
             buffer_r: vec![0.0; size_r],
@@ -98,7 +100,7 @@ impl ReverbState {
     }
 }
 
-fn main() -> anyhow::Result<()> {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 1. Setup Audio
     let params = Arc::new(Mutex::new(AudioParams::default()));
     let audio_params = params.clone();
@@ -496,11 +498,11 @@ fn main() -> anyhow::Result<()> {
     });
 }
 
-fn setup_audio(params: Arc<Mutex<AudioParams>>) -> anyhow::Result<cpal::Stream> {
+fn setup_audio(params: Arc<Mutex<AudioParams>>) -> Result<cpal::Stream, Box<dyn std::error::Error>> {
     let host = cpal::default_host();
     let device = host
         .default_output_device()
-        .context("No output device available")?;
+        .ok_or("No output device available")?;
 
     // Try to get the best config
     let config = device.default_output_config()?;
@@ -516,12 +518,13 @@ fn setup_audio(params: Arc<Mutex<AudioParams>>) -> anyhow::Result<cpal::Stream> 
 
     let err_fn = |err| eprintln!("an error occurred on stream: {}", err);
 
+    // Create RNG once to avoid overhead in callback
+    let mut rng = rand::rngs::StdRng::from_entropy();
+
     let stream = match config.sample_format() {
         cpal::SampleFormat::F32 => device.build_output_stream(
             &config.into(),
             move |data: &mut [f32], _: &cpal::OutputCallbackInfo| {
-                // We need a local RNG for the audio thread
-                let mut local_rng = rand::thread_rng();
                 write_audio(
                     data,
                     channels,
@@ -530,16 +533,16 @@ fn setup_audio(params: Arc<Mutex<AudioParams>>) -> anyhow::Result<cpal::Stream> 
                     &mut reverb,
                     sample_rate,
                     &params,
-                    &mut local_rng,
+                    &mut rng,
                 )
             },
             err_fn,
             None,
         )?,
         _ => {
-            return Err(anyhow::anyhow!(
-                "Unsupported sample format - this example only supports F32"
-            ))
+            return Err(
+                "Unsupported sample format - this example only supports F32".into()
+            )
         }
     };
 
@@ -555,7 +558,7 @@ fn write_audio(
     reverb: &mut ReverbState,
     sample_rate: f32,
     params: &Arc<Mutex<AudioParams>>,
-    rng: &mut rand::rngs::ThreadRng,
+    rng: &mut rand::rngs::StdRng,
 ) {
     // Try to lock, if we can't, just output silence or previous frame (here we just skip)
     // In real audio apps, we'd use atomics or a lock-free queue.
