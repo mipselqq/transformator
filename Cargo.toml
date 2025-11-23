@@ -1,0 +1,14 @@
+[package]
+name = "transformator"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+cpal = "0.15"
+glium = "0.32"
+imgui = "0.10"
+imgui-glium-renderer = "0.10"
+imgui-winit-support = "0.10"
+winit = "0.27"
+anyhow = "1.0"
+rand = "0.8"
