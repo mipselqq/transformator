@@ -5,13 +5,13 @@ edition = "2021"
 
 [dependencies]
 cpal = "0.15"
-glium = "0.32"
+glium = { version = "0.32", default-features = false, features = ["glutin"] }
 imgui = "0.10"
 imgui-glium-renderer = "0.10"
 imgui-winit-support = "0.10"
-winit = "0.27"
+winit = { version = "0.27", default-features = false }
 anyhow = "1.0"
-rand = "0.8"
+rand = { version = "0.8", default-features = false, features = ["std", "std_rng"] }
 
 [profile.release]
 opt-level = "z"     # Optimize for size
