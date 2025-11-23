@@ -1,3 +1,4 @@
+#![windows_subsystem = "windows"]
 use anyhow::Context;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use glium::{Display, Surface};
