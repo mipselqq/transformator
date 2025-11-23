@@ -24,6 +24,7 @@ struct AudioParams {
     noise: f32,
     saturation: f32,
     reverb: f32,
+    overdrive: bool,
     is_playing: bool,
 }
 
@@ -40,6 +41,7 @@ impl Default for AudioParams {
             noise: 0.05,
             saturation: 0.6,
             reverb: 0.3,
+            overdrive: false,
             is_playing: true,
         }
     }
@@ -119,17 +121,15 @@ fn main() -> anyhow::Result<()> {
 
     // Load Arial for Cyrillic support
     if let Ok(font_data) = std::fs::read("C:\\Windows\\Fonts\\arial.ttf") {
-        imgui.fonts().add_font(&[
-            imgui::FontSource::TtfData {
-                data: &font_data,
-                size_pixels: 20.0,
-                config: Some(imgui::FontConfig {
-                    rasterizer_multiply: 1.3,
-                    glyph_ranges: imgui::FontGlyphRanges::cyrillic(),
-                    ..imgui::FontConfig::default()
-                }),
-            }
-        ]);
+        imgui.fonts().add_font(&[imgui::FontSource::TtfData {
+            data: &font_data,
+            size_pixels: 20.0,
+            config: Some(imgui::FontConfig {
+                rasterizer_multiply: 1.3,
+                glyph_ranges: imgui::FontGlyphRanges::cyrillic(),
+                ..imgui::FontConfig::default()
+            }),
+        }]);
     }
 
     let mut platform = WinitPlatform::init(&mut imgui);
@@ -184,22 +184,86 @@ fn main() -> anyhow::Result<()> {
                             ui.separator();
 
                             ui.checkbox("Включить гул (Power On)", &mut p.is_playing);
-                            ui.slider("Frequency (Hz)", 30.0, 80.0, &mut p.frequency);
-                            ui.slider("Volume", 0.0, 1.5, &mut p.volume);
+
+                            // Overdrive logic
+                            let mut overdrive = p.overdrive;
+                            let changed = if p.overdrive {
+                                let _s = ui.push_style_color(
+                                    imgui::StyleColor::Text,
+                                    [1.0, 0.0, 0.0, 1.0],
+                                );
+                                ui.checkbox("!!! РАЗГОН (OVERDRIVE) !!!", &mut overdrive)
+                            } else {
+                                ui.checkbox("Разгон (Overdrive)", &mut overdrive)
+                            };
+
+                            if changed {
+                                p.overdrive = overdrive;
+                                if !p.overdrive {
+                                    // Clamp values back to normal ranges
+                                    p.frequency = p.frequency.clamp(30.0, 80.0);
+                                    p.volume = p.volume.clamp(0.0, 1.5);
+                                    p.harmonic_3 = p.harmonic_3.clamp(0.0, 1.5);
+                                    p.harmonic_5 = p.harmonic_5.clamp(0.0, 1.5);
+                                    p.harmonic_7 = p.harmonic_7.clamp(0.0, 1.5);
+                                    p.mechanical_hum = p.mechanical_hum.clamp(0.0, 1.5);
+                                    p.metallic_res = p.metallic_res.clamp(0.0, 1.5);
+                                    p.saturation = p.saturation.clamp(0.0, 1.5);
+                                    p.reverb = p.reverb.clamp(0.0, 1.5);
+                                    p.noise = p.noise.clamp(0.0, 0.8);
+                                }
+                            }
+
+                            let mult = if p.overdrive { 20.0 } else { 1.0 };
+
+                            // Style for sliders
+                            let _s1 = if p.overdrive {
+                                Some(ui.push_style_color(
+                                    imgui::StyleColor::SliderGrab,
+                                    [1.0, 0.0, 0.0, 1.0],
+                                ))
+                            } else {
+                                None
+                            };
+                            let _s2 = if p.overdrive {
+                                Some(ui.push_style_color(
+                                    imgui::StyleColor::SliderGrabActive,
+                                    [0.8, 0.0, 0.0, 1.0],
+                                ))
+                            } else {
+                                None
+                            };
+                            let _s3 = if p.overdrive {
+                                Some(ui.push_style_color(
+                                    imgui::StyleColor::FrameBg,
+                                    [0.3, 0.0, 0.0, 1.0],
+                                ))
+                            } else {
+                                None
+                            };
+
+                            let min_freq = if p.overdrive { 1.0 } else { 30.0 };
+                            ui.slider("Frequency (Hz)", min_freq, 80.0 * mult, &mut p.frequency);
+                            ui.slider("Volume", 0.0, 1.5 * mult, &mut p.volume);
                             ui.separator();
                             ui.text("Harmonics (Character)");
-                            ui.slider("3rd Harmonic (150Hz)", 0.0, 1.5, &mut p.harmonic_3);
-                            ui.slider("5th Harmonic (250Hz)", 0.0, 1.5, &mut p.harmonic_5);
-                            ui.slider("7th Harmonic (350Hz)", 0.0, 1.5, &mut p.harmonic_7);
+                            ui.slider("3rd Harmonic (150Hz)", 0.0, 1.5 * mult, &mut p.harmonic_3);
+                            ui.slider("5th Harmonic (250Hz)", 0.0, 1.5 * mult, &mut p.harmonic_5);
+                            ui.slider("7th Harmonic (350Hz)", 0.0, 1.5 * mult, &mut p.harmonic_7);
                             ui.separator();
                             ui.text("Industrial Texture");
-                            ui.slider("Mechanical Hum (100Hz)", 0.0, 1.5, &mut p.mechanical_hum);
-                            ui.slider("Metallic Resonance", 0.0, 1.5, &mut p.metallic_res);
+                            ui.slider(
+                                "Mechanical Hum (100Hz)",
+                                0.0,
+                                1.5 * mult,
+                                &mut p.mechanical_hum,
+                            );
+                            ui.slider("Metallic Resonance", 0.0, 1.5 * mult, &mut p.metallic_res);
                             ui.separator();
                             ui.text("Character");
-                            ui.slider("Saturation (Drive)", 0.0, 1.5, &mut p.saturation);
-                            ui.slider("Reverb (Space)", 0.0, 1.5, &mut p.reverb);
-                            ui.slider("Noise / Crackle", 0.0, 0.8, &mut p.noise);
+                            ui.slider("Saturation (Drive)", 0.0, 1.5 * mult, &mut p.saturation);
+                            ui.slider("Reverb (Space)", 0.0, 1.5 * mult, &mut p.reverb);
+                            ui.slider("Noise / Crackle", 0.0, 0.8 * mult, &mut p.noise);
                         });
 
                     // --- Animation ---
@@ -212,7 +276,16 @@ fn main() -> anyhow::Result<()> {
                         .title_bar(true)
                         .build(|| {
                             let draw_list = ui.get_window_draw_list();
-                            let p_min = ui.cursor_screen_pos();
+                            let mut p_min = ui.cursor_screen_pos();
+                            let mut rng = rand::thread_rng();
+
+                            // Shake effect if overdrive is on
+                            if p.overdrive {
+                                let shake = 15.0;
+                                p_min[0] += rng.gen_range(-shake..shake);
+                                p_min[1] += rng.gen_range(-shake..shake);
+                            }
+
                             let canvas_size = ui.content_region_avail();
                             let center_x = p_min[0] + canvas_size[0] / 2.0;
                             let center_y = p_min[1] + canvas_size[1] / 2.0;
@@ -245,10 +318,18 @@ fn main() -> anyhow::Result<()> {
 
                             // Draw Person
                             let person_color = pack_color(1.0, 1.0, 1.0, 1.0);
-                            let mut rng = rand::thread_rng();
 
                             // Jitter if playing
-                            let jitter = if p.is_playing { 5.0 } else { 0.0 };
+                            let jitter = if p.is_playing {
+                                if p.overdrive {
+                                    15.0
+                                } else {
+                                    5.0
+                                }
+                            } else {
+                                0.0
+                            };
+
                             // Helper to get jitter
                             let get_jitter =
                                 |rng: &mut rand::rngs::ThreadRng| rng.gen_range(-jitter..jitter);
@@ -319,7 +400,11 @@ fn main() -> anyhow::Result<()> {
                             // Lightning
                             if p.is_playing {
                                 let lightning_color = pack_color(0.5, 0.8, 1.0, 1.0);
-                                let num_bolts = rng.gen_range(1..4);
+                                let num_bolts = if p.overdrive {
+                                    rng.gen_range(10..25)
+                                } else {
+                                    rng.gen_range(1..4)
+                                };
 
                                 for _ in 0..num_bolts {
                                     let start = [
@@ -343,7 +428,46 @@ fn main() -> anyhow::Result<()> {
 
                                     draw_list
                                         .add_polyline(points, lightning_color)
-                                        .thickness(2.0)
+                                        .thickness(if p.overdrive { 3.0 } else { 2.0 })
+                                        .build();
+                                }
+
+                                // Ambient Lightning (Chaos around)
+                                let ambient_bolts = if p.overdrive {
+                                    rng.gen_range(5..15)
+                                } else {
+                                    rng.gen_range(0..2)
+                                };
+
+                                for _ in 0..ambient_bolts {
+                                    // Start somewhere near the transformer box
+                                    let start = [
+                                        p_min[0] + 20.0 + rng.gen_range(0.0..100.0),
+                                        center_y - 50.0 + rng.gen_range(0.0..150.0),
+                                    ];
+
+                                    // End somewhere random in the danger zone
+                                    let end = [
+                                        p_min[0] + rng.gen_range(0.0..canvas_size[0]),
+                                        p_min[1] + rng.gen_range(0.0..canvas_size[1]),
+                                    ];
+
+                                    let mut points = vec![start];
+                                    let segments = 4;
+                                    for i in 1..segments {
+                                        let t = i as f32 / segments as f32;
+                                        let mx = start[0] + (end[0] - start[0]) * t;
+                                        let my = start[1] + (end[1] - start[1]) * t;
+                                        points.push([
+                                            mx + rng.gen_range(-40.0..40.0),
+                                            my + rng.gen_range(-40.0..40.0),
+                                        ]);
+                                    }
+                                    points.push(end);
+
+                                    draw_list
+                                        .add_polyline(points, lightning_color)
+                                        .thickness(if p.overdrive { 2.0 } else { 1.0 })
                                         .build();
                                 }
                             }
