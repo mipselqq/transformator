@@ -12,3 +12,10 @@ imgui-winit-support = "0.10"
 winit = "0.27"
 anyhow = "1.0"
 rand = "0.8"
+
+[profile.release]
+opt-level = "z"     # Optimize for size
+lto = true          # Enable Link Time Optimization
+codegen-units = 1   # Reduce parallel code generation units to increase optimization
+panic = "abort"     # Abort on panic
+strip = true        # Strip symbols from binary
